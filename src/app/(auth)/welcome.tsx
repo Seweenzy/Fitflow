@@ -33,10 +33,7 @@ export default function Welcome() {
         >
           I already have an account
         </Button>
-        <Text style={styles.note}>
-          Development mode uses secure local app state. No backend is connected
-          yet.
-        </Text>
+      
       </View>
     </Screen>
   );
