@@ -27,8 +27,7 @@ import {
 } from '@/types/fitflow';
 
 type AuthResult = { error?: string; requiresEmailConfirmation?: boolean };
-type OperationResult = { ok: true } | { ok: false; error: string };
-type AppContextValue = AppState & {
+type OperationResult = { ok: true } | { ok: false; error: string };type AppContextValue = AppState & {
   ready: boolean;
   initializationError: string | null;
   retryInitialization: () => void;
@@ -47,6 +46,12 @@ type AppContextValue = AppState & {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+function isTokenClockError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('jwt issued at future') || message.includes('iat');
+}
+
 export function AppProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState(initialState);
   const [ready, setReady] = useState(false);
@@ -64,8 +69,31 @@ export function AppProvider({ children }: PropsWithChildren) {
         const local = await loadState();
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
-        const next = data.session
-          ? await loadRemoteState(supabase, data.session, local)
+        let session = data.session;
+        if (session) {
+          try {
+            const next = await loadRemoteState(supabase, session, local);
+            if (active) {
+              setState(next);
+              setInitializationError(null);
+            }
+            return;
+          } catch (sessionError) {
+            if (!isTokenClockError(sessionError) || !active) throw sessionError;
+            const refreshed = await supabase.auth.refreshSession();
+            if (refreshed.error || !refreshed.data.session) {
+              await supabase.auth.signOut();
+              if (active) {
+                setState({ ...local, authenticated: false });
+              }
+              reportOperationalError('app_session_refresh_failed', refreshed.error ?? sessionError);
+              return;
+            }
+            session = refreshed.data.session;
+          }
+        }
+        const next = session
+          ? await loadRemoteState(supabase, session, local)
           : { ...local, authenticated: false };
         if (active) {
           setState(next);
