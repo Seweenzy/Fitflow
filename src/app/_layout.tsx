@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Redirect, Stack, ThemeProvider, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 350, fade: true });
 function Navigation() {
-  const { initializationError, ready, retryInitialization } = useApp();
+  const { authenticated, initializationError, onboarded, ready, retryInitialization } = useApp();
+  const segments = useSegments();
   const theme = useFitFlowTheme();
   useEffect(() => {
     if (ready) SplashScreen.hide();
@@ -26,6 +27,20 @@ function Navigation() {
         <Button onPress={retryInitialization}>Try Again</Button>
       </View>
     );
+  }
+  const rootSegment = segments[0];
+  const protectedRoute =
+    rootSegment === '(tabs)' ||
+    rootSegment === 'workouts' ||
+    rootSegment === 'settings' ||
+    rootSegment === 'edit-profile' ||
+    rootSegment === 'reset-password';
+  if (protectedRoute && !authenticated) return <Redirect href="/(auth)/welcome" />;
+  if (rootSegment === '(auth)' && authenticated) {
+    return <Redirect href={'/(tabs)' as never} />;
+  }
+  if (rootSegment === 'onboarding' && onboarded) {
+    return <Redirect href={authenticated ? ('/(tabs)' as never) : '/(auth)/welcome'} />;
   }
   return (
     <ThemeProvider value={theme.dark ? DarkTheme : DefaultTheme}>

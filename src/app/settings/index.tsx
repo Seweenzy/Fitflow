@@ -9,13 +9,15 @@ import { colors } from '@/constants/fitflow';
 export default function Settings() {
   const app = useApp();
   const theme = useFitFlowTheme();
-  const toggleTheme = () =>
-    app.update({
+  const toggleTheme = async () => {
+    const result = await app.update({
       preferences: {
         ...app.preferences,
         theme: app.preferences.theme === 'light' ? 'dark' : 'light',
       },
     });
+    if (!result.ok) Alert.alert('Unable to save settings', result.error);
+  };
   return (
     <Screen>
       <View style={styles.top}>
@@ -50,15 +52,16 @@ export default function Settings() {
           icon="options-outline"
           label="Units"
           value={app.preferences.units === 'metric' ? 'Metric' : 'Imperial'}
-          onPress={() =>
-            app.update({
+           onPress={async () => {
+             const result = await app.update({
               preferences: {
                 ...app.preferences,
                 units:
                   app.preferences.units === 'metric' ? 'imperial' : 'metric',
               },
-            })
-          }
+             });
+             if (!result.ok) Alert.alert('Unable to save settings', result.error);
+           }}
           theme={theme}
         />
       </Card>
@@ -69,7 +72,7 @@ export default function Settings() {
           onPress={() =>
             Alert.alert(
               'Privacy',
-              'FitFlow keeps this development version’s profile and workout history on your device.',
+               'FitFlow stores your profile and workout history in your FitFlow account so your progress can sync across sessions.',
             )
           }
           theme={theme}
@@ -93,8 +96,8 @@ export default function Settings() {
         />
       </Card>
       <Text style={[styles.note, { color: theme.muted }]}>
-        FitFlow is a local-first MVP. It does not connect to Apple Health,
-        Google Fit, or a remote authentication backend yet.
+         FitFlow syncs account data with Supabase. Apple Health and Google Fit
+         integrations are not configured.
       </Text>
     </Screen>
   );

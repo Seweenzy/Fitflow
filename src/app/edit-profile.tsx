@@ -20,16 +20,20 @@ export default function EditProfile() {
   const [age, setAge] = useState(app.user?.age ?? '');
   const [height, setHeight] = useState(app.user?.height ?? '');
   const [weight, setWeight] = useState(app.user?.weight ?? '');
-  const save = () => {
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
     if (name.trim().length < 2)
       return Alert.alert(
         'Check your name',
         'Please enter at least 2 characters.',
       );
     if (!app.user) return;
-    app.update({
+    setSaving(true);
+    const result = await app.update({
       user: { ...app.user, name: name.trim(), age, height, weight },
     });
+    setSaving(false);
+    if (!result.ok) return Alert.alert('Unable to save profile', result.error);
     router.back();
   };
   return (
@@ -63,7 +67,9 @@ export default function EditProfile() {
         theme={theme}
         numeric
       />
-      <Button onPress={save}>Save Changes</Button>
+      <Button disabled={saving} onPress={save}>
+        {saving ? 'Saving...' : 'Save Changes'}
+      </Button>
     </Screen>
   );
 }

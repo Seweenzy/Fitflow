@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -37,8 +38,12 @@ export default function Onboarding() {
     goals: [],
   });
   const next = () => setStep((value) => Math.min(6, value + 1));
-  const finish = () => {
-    update({ user: profile, onboarded: true });
+  const [saving, setSaving] = useState(false);
+  const finish = async () => {
+    setSaving(true);
+    const result = await update({ user: profile, onboarded: true });
+    setSaving(false);
+    if (!result.ok) return Alert.alert('Unable to save setup', result.error);
     router.replace('/(auth)/welcome');
   };
   const toggleGoal = (goal: Goal) =>
@@ -182,6 +187,7 @@ export default function Onboarding() {
         {content[step]}
         <Button
           disabled={
+            saving ||
             (step === 1 && !profile.goals.length) ||
             (step === 2 && !profile.experience) ||
             (step === 3 && !profile.preference) ||
@@ -193,7 +199,9 @@ export default function Onboarding() {
             ? 'Get Started'
             : step === 6
               ? 'Create My Plan'
-              : 'Continue'}
+              : saving
+                ? 'Saving...'
+                : 'Continue'}
         </Button>
       </Screen>
     </KeyboardAvoidingView>

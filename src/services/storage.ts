@@ -27,6 +27,9 @@ export const initialState: AppState = {
   activeWorkout: null,
   version: VERSION,
 };
+export function clearUserState(): AppState {
+  return { ...initialState };
+}
 export async function loadState(): Promise<AppState> {
   try {
     const raw = await AsyncStorage.getItem(KEY);
@@ -57,10 +60,11 @@ function normalizeState(value: Partial<AppState>): AppState {
     version: VERSION,
   };
 }
-export async function saveState(state: AppState) {
+export async function saveState(state: AppState): Promise<boolean> {
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify(state));
+    return true;
   } catch {
-    /* storage failures are non-fatal for this local MVP */
+    return false;
   }
 }

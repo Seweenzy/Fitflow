@@ -33,10 +33,17 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     const trimmedEmail = email.trim().toLowerCase();
     setSubmitting(true);
     setError('');
-    const result =
-      mode === 'signup'
-        ? await signUp(name.trim(), trimmedEmail, password)
-        : await signIn(trimmedEmail, password);
+    let result;
+    try {
+      result =
+        mode === 'signup'
+          ? await signUp(name.trim(), trimmedEmail, password)
+          : await signIn(trimmedEmail, password);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to sign in.');
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(false);
     if (result.error) return setError(result.error);
     if (result.requiresEmailConfirmation) {

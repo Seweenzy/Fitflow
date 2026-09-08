@@ -14,10 +14,19 @@ export default function ForgotPassword() {
     if (!/^\S+@\S+\.\S+$/.test(normalizedEmail))
       return Alert.alert('Check your email', 'Enter a valid email address.');
     setSubmitting(true);
-    const { error } = await getSupabaseClient().auth.resetPasswordForEmail(
-      normalizedEmail,
-      { redirectTo: Linking.createURL('/reset-password') },
-    );
+    let error;
+    try {
+      ({ error } = await getSupabaseClient().auth.resetPasswordForEmail(
+        normalizedEmail,
+        { redirectTo: Linking.createURL('/reset-password') },
+      ));
+    } catch (caught) {
+      setSubmitting(false);
+      return Alert.alert(
+        'Unable to reset password',
+        caught instanceof Error ? caught.message : 'Please try again.',
+      );
+    }
     setSubmitting(false);
     if (error) return Alert.alert('Unable to reset password', error.message);
     Alert.alert(

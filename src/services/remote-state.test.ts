@@ -1,5 +1,5 @@
 import { expect, jest, describe, it } from '@jest/globals';
-import { initialState } from './storage';
+import { clearUserState, initialState } from './storage';
 import { loadRemoteState, mapRemoteState } from './remote-state';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -17,6 +17,14 @@ const session = {
 } as any;
 
 describe('authenticated remote state', () => {
+  it('provides a clean state boundary for a signed-out device', () => {
+    const cleared = clearUserState();
+    expect(cleared.user).toBeNull();
+    expect(cleared.sessions).toEqual([]);
+    expect(cleared.activeWorkout).toBeNull();
+    expect(cleared.authenticated).toBe(false);
+  });
+
   it('maps the authenticated profile and sessions into app state', () => {
     const state = mapRemoteState(
       session,

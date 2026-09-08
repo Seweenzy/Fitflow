@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
@@ -18,6 +18,7 @@ export default function Complete() {
   const { activeWorkout, completeSession, setActiveWorkout } = useApp();
   const theme = useFitFlowTheme();
   const saved = useRef(false);
+  const [saving, setSaving] = useState(false);
   const minutes = workout
     ? Math.max(Number(duration) || workout.duration, 1)
     : 1;
@@ -26,7 +27,8 @@ export default function Complete() {
     if (saved.current) return;
     saved.current = true;
     const now = new Date();
-    completeSession({
+    setSaving(true);
+    void completeSession({
       id: `${workout.id}-${now.getTime()}`,
       workoutId: workout.id,
       startedAt:
@@ -40,8 +42,15 @@ export default function Complete() {
         activeWorkout?.workoutId === workout.id
           ? Math.min(activeWorkout.completedExercises.length, workout.exercises.length)
           : workout.exercises.length,
+    }).then((result) => {
+      setSaving(false);
+      if (!result.ok) {
+        saved.current = false;
+        Alert.alert('Unable to save workout', result.error);
+        return;
+      }
+      setActiveWorkout(null);
     });
-    setActiveWorkout(null);
   }, [activeWorkout, completeSession, duration, setActiveWorkout, workout]);
   if (!workout) return null;
   return (
@@ -63,8 +72,8 @@ export default function Complete() {
         />
       </View>
       <View style={styles.actions}>
-        <Button onPress={() => router.replace('/(tabs)/progress')}>
-          View Progress
+        <Button disabled={saving} onPress={() => router.replace('/(tabs)/progress')}>
+          {saving ? 'Saving...' : 'View Progress'}
         </Button>
         <Button
           variant="ghost"

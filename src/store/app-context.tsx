@@ -9,6 +9,7 @@ import { Linking } from 'react-native';
 import {
   AppState,
   initialState,
+  clearUserState,
   loadState,
   saveState,
 } from '@/services/storage';
@@ -18,27 +19,30 @@ import {
 } from '@/services/supabase';
 import { signInWithEmail, signUpWithEmail } from '@/services/auth';
 import { loadRemoteState } from '@/services/remote-state';
+import { insertRemoteSession, updateRemoteProfile } from '@/services/remote-writes';
+import { reportOperationalError } from '@/services/observability';
 import {
   ActiveWorkout,
   WorkoutSession,
 } from '@/types/fitflow';
 
 type AuthResult = { error?: string; requiresEmailConfirmation?: boolean };
+type OperationResult = { ok: true } | { ok: false; error: string };
 type AppContextValue = AppState & {
   ready: boolean;
   initializationError: string | null;
   retryInitialization: () => void;
-  update: (patch: Partial<AppState>) => Promise<void>;
+  update: (patch: Partial<AppState>) => Promise<OperationResult>;
   signUp: (
     name: string,
     email: string,
     password: string,
   ) => Promise<AuthResult>;
   signIn: (email: string, password: string) => Promise<AuthResult>;
-  completeSession: (session: WorkoutSession) => Promise<void>;
+  completeSession: (session: WorkoutSession) => Promise<OperationResult>;
   setActiveWorkout: (workout: ActiveWorkout | null) => void;
   disableReminders: () => void;
-  signOut: () => Promise<void>;
+  signOut: () => Promise<OperationResult>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -68,6 +72,7 @@ export function AppProvider({ children }: PropsWithChildren) {
           setInitializationError(null);
         }
       } catch (error) {
+        reportOperationalError('app_initialization_failed', error);
         if (active) {
           setInitializationError(
             error instanceof Error
@@ -90,6 +95,7 @@ export function AppProvider({ children }: PropsWithChildren) {
           setInitializationError(null);
         }
       } catch (error) {
+        reportOperationalError('auth_link_restore_failed', error);
         if (active) {
           setInitializationError(
             error instanceof Error
@@ -131,29 +137,30 @@ export function AppProvider({ children }: PropsWithChildren) {
     if (ready) void saveState(state);
   }, [state, ready]);
 
-  const update = async (patch: Partial<AppState>) => {
-    setState((current) => ({ ...current, ...patch }));
-    const { data } = await getSupabaseClient().auth.getSession();
-    if (!data.session || (!patch.user && !patch.preferences)) return;
+  const update = async (patch: Partial<AppState>): Promise<OperationResult> => {
+    const next = { ...state, ...patch };
+    const { data, error } = await getSupabaseClient().auth.getSession();
+    if (error) return { ok: false, error: error.message };
+    if (!data.session || (!patch.user && !patch.preferences)) {
+      setState(next);
+      return { ok: true };
+    }
 
-    const user = patch.user ?? state.user;
-    const preferences = patch.preferences ?? state.preferences;
-    if (!user) return;
-    await getSupabaseClient()
-      .from('profiles')
-      .update({
-        name: user.name,
-        goals: user.goals,
-        experience: user.experience ?? null,
-        preference: user.preference ?? null,
-        frequency: user.frequency ?? null,
-        age: user.age ?? null,
-        height: user.height ?? null,
-        weight: user.weight ?? null,
-        gender: user.gender ?? null,
-        preferences,
-      })
-      .eq('id', data.session.user.id);
+    if (!next.user) return { ok: false, error: 'A profile is required to save changes.' };
+    const result = await updateRemoteProfile(
+      getSupabaseClient(),
+      data.session.user.id,
+      next.user,
+      next.preferences,
+    );
+    if (!result.ok) {
+      reportOperationalError('profile_sync_failed', result.error, {
+        operation: 'update_profile',
+      });
+      return result;
+    }
+    setState(next);
+    return { ok: true };
   };
 
   const signUp = async (name: string, email: string, password: string) => {
@@ -192,23 +199,23 @@ export function AppProvider({ children }: PropsWithChildren) {
     return {};
   };
 
-  const completeSession = async (session: WorkoutSession) => {
-    setState((current) => ({
-      ...current,
-      sessions: [session, ...current.sessions],
-    }));
-    const { data } = await getSupabaseClient().auth.getSession();
-    if (!data.session) return;
-    await getSupabaseClient().from('workout_sessions').insert({
-      id: session.id,
-      user_id: data.session.user.id,
-      workout_id: session.workoutId,
-      started_at: session.startedAt,
-      completed_at: session.completedAt,
-      duration: session.duration,
-      calories: session.calories,
-      completed_exercises: session.completedExercises,
-    });
+  const completeSession = async (session: WorkoutSession): Promise<OperationResult> => {
+    const { data, error } = await getSupabaseClient().auth.getSession();
+    if (error) return { ok: false, error: error.message };
+    if (!data.session) return { ok: false, error: 'Your session has expired. Please sign in again.' };
+    const result = await insertRemoteSession(
+      getSupabaseClient(),
+      data.session.user.id,
+      session,
+    );
+    if (!result.ok) {
+      reportOperationalError('workout_sync_failed', result.error, {
+        operation: 'insert_session',
+      });
+      return result;
+    }
+    setState((current) => ({ ...current, sessions: [session, ...current.sessions] }));
+    return { ok: true };
   };
   const setActiveWorkout = (activeWorkout: ActiveWorkout | null) =>
     setState((current) => ({ ...current, activeWorkout }));
@@ -216,9 +223,13 @@ export function AppProvider({ children }: PropsWithChildren) {
     void update({
       preferences: { ...state.preferences, notifications: false },
     });
-  const signOut = async () => {
-    await getSupabaseClient().auth.signOut();
-    setState((current) => ({ ...current, authenticated: false }));
+  const signOut = async (): Promise<OperationResult> => {
+    const { error } = await getSupabaseClient().auth.signOut();
+    const cleared = clearUserState();
+    setState(cleared);
+    await saveState(cleared);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
   };
 
   return (

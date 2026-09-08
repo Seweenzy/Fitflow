@@ -53,9 +53,9 @@ export default function Profile() {
       label: 'Privacy',
       action: () =>
         Alert.alert(
-          'Privacy',
-          'FitFlow stores this MVP data locally on your device. No fitness data is sent to a server.',
-        ),
+            'Privacy',
+            'FitFlow stores your profile and workout history in your FitFlow account so your progress can sync across sessions.',
+          ),
     },
     {
       icon: 'information-circle-outline',
@@ -142,7 +142,10 @@ export default function Profile() {
                 text: 'Sign out',
                 style: 'destructive',
                 onPress: async () => {
-                  await app.signOut();
+                  const result = await app.signOut();
+                  if (!result.ok) {
+                    return Alert.alert('Unable to sign out', result.error);
+                  }
                   router.replace('/(auth)/welcome');
                 },
               },

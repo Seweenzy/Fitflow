@@ -18,9 +18,17 @@ export default function ResetPassword() {
       );
     }
     setSubmitting(true);
-    const { error } = await getSupabaseClient().auth.updateUser({ password });
-    setSubmitting(false);
-    if (error) return Alert.alert('Unable to update password', error.message);
+    try {
+      const { error } = await getSupabaseClient().auth.updateUser({ password });
+      if (error) return Alert.alert('Unable to update password', error.message);
+    } catch (caught) {
+      return Alert.alert(
+        'Unable to update password',
+        caught instanceof Error ? caught.message : 'Please try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
     Alert.alert('Password updated', 'You can now continue using FitFlow.', [
       { text: 'Continue', onPress: () => router.replace('/(tabs)' as never) },
     ]);

@@ -24,7 +24,10 @@ export default function NotificationsSettings() {
   const save = async () => {
     if (!enabled) {
       await cancelReminders();
-      app.disableReminders();
+      const result = await app.update({
+        preferences: { ...app.preferences, notifications: false },
+      });
+      if (!result.ok) return Alert.alert('Unable to save settings', result.error);
       return router.back();
     }
     if (!days.length) {
@@ -45,7 +48,7 @@ export default function NotificationsSettings() {
         'Enable notifications in your device settings to receive workout reminders.',
       );
     }
-    app.update({
+    const updateResult = await app.update({
       preferences: {
         ...app.preferences,
         notifications: true,
@@ -53,6 +56,9 @@ export default function NotificationsSettings() {
         workoutDays: days,
       },
     });
+    if (!updateResult.ok) {
+      return Alert.alert('Unable to save reminders', updateResult.error);
+    }
     router.back();
   };
   return (
